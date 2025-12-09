@@ -1,287 +1,333 @@
-const TelegramBot = require('node-telegram-bot-api');
-const axios = require('axios');
+#!/usr/bin/env python3
+"""
+PINTEREST VIDEO DOWNLOADER BOT
+Télécharge des vidéos depuis Pinterest
+"""
 
-// CONFIGURATION AVEC TON TOKEN
-const bot = new TelegramBot('8345426244:AAHIKu5wJyHKczMnUB58BdozgMezaFE9WKM', { 
-    polling: true 
-});
+import os
+import logging
+import asyncio
+from datetime import datetime
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from downloader import PinterestDownloader
+import config
+from utils import cleanup_old_files, format_size, get_user_display
 
-// Images KING-CHECK-BAN
-const IMAGES = {
-    welcome: 'https://files.catbox.moe/qkafkb.jpg',
-    checking: 'https://files.catbox.moe/deslfn.jpg', 
-    result: 'https://files.catbox.moe/601u5z.jpg'
-};
+# Setup logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
-// VÉRIFICATEUR WHATSAPP RÉEL
-class RealWhatsAppChecker {
+class PinterestBot:
+    def __init__(self):
+        self.downloader = PinterestDownloader()
+        self.user_sessions = {}
+        
+    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Commande /start"""
+        user = update.effective_user
+        
+        welcome = f"""
+🎬 *Pinterest Video Downloader* 🎬
+
+Bonjour *{user.first_name}* ! 👋
+
+Je peux télécharger des vidéos depuis Pinterest pour vous.
+
+*Comment faire :*
+1. 📱 Trouvez une vidéo sur Pinterest
+2. 🔗 Copiez le lien
+3. 📤 Envoyez-le moi
+4. ⬇️ Je vous envoie la vidéo !
+
+*Liens acceptés :*
+• https://pinterest.com/pin/123456789/
+• https://pin.it/abc123
+• Tous liens Pinterest
+
+*Fonctionnalités :*
+✅ Qualité HD/SD
+✅ Rapide et gratuit
+✅ Sans filigrane
+✅ Support longues vidéos
+
+Envoyez-moi un lien pour commencer !
+        """
+        
+        keyboard = [
+            [InlineKeyboardButton("❓ Aide", callback_data="help"),
+             InlineKeyboardButton("⚙️ Paramètres", callback_data="settings")],
+            [InlineKeyboardButton("📊 Stats", callback_data="stats")]
+        ]
+        
+        await update.message.reply_text(
+            welcome,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
     
-    // Méthode 1: Vérification via l'API WhatsApp Business
-    static async checkViaOfficialAPI(phoneNumber) {
-        try {
-            // Format: 33123456789 -> +33123456789
-            const formattedNumber = `+${phoneNumber}`;
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Gérer les messages avec liens"""
+        text = update.message.text.strip()
+        user_id = update.effective_user.id
+        
+        if not self.downloader.is_valid_url(text):
+            await update.message.reply_text(
+                "❌ *Lien invalide*\n\n"
+                "Veuillez envoyer un lien Pinterest valide :\n"
+                "• https://pinterest.com/pin/...\n"
+                "• https://pin.it/...\n\n"
+                "Utilisez /help pour plus d'info.",
+                parse_mode='Markdown'
+            )
+            return
+        
+        # Message d'attente
+        wait_msg = await update.message.reply_text("🔍 *Analyse en cours...*", parse_mode='Markdown')
+        
+        try:
+            # Récupérer les infos de la vidéo
+            video_info = await self.downloader.get_video_info(text)
             
-            // Utilisation d'un service de vérification réel
-            const response = await axios.post('https://api.whatsapp.net/check', {
-                phone: formattedNumber
-            }, {
-                timeout: 10000
-            });
+            if not video_info:
+                await wait_msg.edit_text(
+                    "❌ *Vidéo non trouvée*\n\n"
+                    "Raisons possibles :\n"
+                    "• Vidéo privée\n"
+                    "• Lien expiré\n"
+                    "• Problème réseau\n\n"
+                    "Essayez un autre lien.",
+                    parse_mode='Markdown'
+                )
+                return
             
-            return {
-                exists: response.data.exists,
-                isBusiness: response.data.is_business,
-                status: response.data.status
-            };
-        } catch (error) {
-            throw new Error('Service WhatsApp indisponible');
-        }
-    }
-    
-    // Méthode 2: Vérification via NumVerify (service réel)
-    static async checkViaNumVerify(phoneNumber) {
-        try {
-            const API_KEY = 'ton_api_key_numverify'; // Inscris-toi sur numverify.com
-            const response = await axios.get(
-                `http://apilayer.net/api/validate?access_key=${API_KEY}&number=${phoneNumber}&country_code=&format=1`
-            );
+            # Afficher les options
+            await self.show_video_options(wait_msg, video_info, user_id)
             
-            return {
-                valid: response.data.valid,
-                number: response.data.number,
-                carrier: response.data.carrier,
-                line_type: response.data.line_type
-            };
-        } catch (error) {
-            throw new Error('Service de validation indisponible');
-        }
-    }
+        except Exception as e:
+            logger.error(f"Error: {e}")
+            await wait_msg.edit_text(f"❌ Erreur : {str(e)[:100]}")
     
-    // Méthode 3: Vérification patterns réels de bannissement
-    static analyzeRealPatterns(phoneNumber) {
-        const issues = [];
+    async def show_video_options(self, message, video_info, user_id):
+        """Afficher les options de téléchargement"""
+        # Sauvegarder les infos
+        self.user_sessions[user_id] = video_info
         
-        // Patterns réels de numéros bannis
-        if (/(666|420|69){3,}/.test(phoneNumber)) {
-            issues.push('PATTERN_SUSPECT');
-        }
+        # Créer les boutons
+        buttons = []
+        for quality in video_info.get('qualities', []):
+            btn_text = f"⬇️ {quality['quality']} ({quality['size']})"
+            btn_data = f"download_{quality['id']}"
+            buttons.append([InlineKeyboardButton(btn_text, callback_data=btn_data)])
         
-        if (phoneNumber.match(/(\d)\1{5,}/)) {
-            issues.push('REPETITION_EXCESSIVE');
-        }
+        buttons.append([
+            InlineKeyboardButton("🔄 Autre lien", callback_data="new"),
+            InlineKeyboardButton("📊 Infos", callback_data=f"info_{user_id}")
+        ])
         
-        if (phoneNumber.length < 10 || phoneNumber.length > 15) {
-            issues.push('INVALID_LENGTH');
-        }
+        text = f"""
+🎬 *Vidéo trouvée !*
+
+*Titre :* {video_info.get('title', 'Sans titre')}
+*Durée :* {video_info.get('duration', 'Inconnue')}
+
+Choisissez une qualité :
+        """
         
-        return issues;
-    }
+        await message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode='Markdown'
+        )
     
-    // MÉTHODE PRINCIPALE RÉELLE
-    static async realBanCheck(phoneNumber) {
-        try {
-            const results = {
-                number: phoneNumber,
-                checks: [],
-                isBanned: false,
-                isRestricted: false,
-                confidence: 0
-            };
+    async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Gérer les interactions boutons"""
+        query = update.callback_query
+        await query.answer()
+        
+        data = query.data
+        user_id = query.from_user.id
+        
+        if data.startswith("download_"):
+            quality_id = data.replace("download_", "")
+            await self.process_download(query, user_id, quality_id)
+        
+        elif data.startswith("info_"):
+            await self.show_info(query, user_id)
+        
+        elif data == "help":
+            await self.show_help(query)
+        
+        elif data == "settings":
+            await self.show_settings(query)
+        
+        elif data == "stats":
+            await self.show_stats(query, user_id)
+        
+        elif data == "new":
+            await query.edit_message_text("📤 *Envoyez un nouveau lien Pinterest*", parse_mode='Markdown')
+    
+    async def process_download(self, query, user_id, quality_id):
+        """Traiter le téléchargement"""
+        video_info = self.user_sessions.get(user_id)
+        if not video_info:
+            await query.edit_message_text("❌ Session expirée. Renvoyez le lien.")
+            return
+        
+        # Trouver la qualité demandée
+        quality = None
+        for q in video_info.get('qualities', []):
+            if q['id'] == quality_id:
+                quality = q
+                break
+        
+        if not quality:
+            await query.edit_message_text("❌ Qualité non disponible")
+            return
+        
+        # Démarrer le téléchargement
+        await query.edit_message_text(
+            f"📥 *Téléchargement {quality['quality']}...*\n"
+            "Veuillez patienter.",
+            parse_mode='Markdown'
+        )
+        
+        try:
+            # Télécharger la vidéo
+            result = await self.downloader.download_video(
+                quality['url'],
+                f"{user_id}_{quality_id}"
+            )
             
-            // Check 1: Patterns
-            const patterns = this.analyzeRealPatterns(phoneNumber);
-            if (patterns.length > 0) {
-                results.checks.push(`Patterns: ${patterns.join(', ')}`);
-                results.confidence += 30;
-            }
+            if not result:
+                await query.edit_message_text("❌ Échec du téléchargement")
+                return
             
-            // Check 2: Validation numéro (si API disponible)
-            try {
-                const numVerify = await this.checkViaNumVerify(phoneNumber);
-                if (!numVerify.valid) {
-                    results.checks.push(`Numéro invalide (${numVerify.line_type})`);
-                    results.isBanned = true;
-                    results.confidence += 40;
-                }
-            } catch (e) {
-                results.checks.push('Validation: Service indisponible');
-            }
+            # Envoyer la vidéo
+            await query.message.reply_video(
+                video=open(result['path'], 'rb'),
+                caption=f"🎬 {video_info.get('title', 'Vidéo Pinterest')}\n"
+                       f"📦 {quality['size']} • {quality['quality']}",
+                supports_streaming=True
+            )
             
-            // Check 3: Structure du numéro
-            if (!this.isValidStructure(phoneNumber)) {
-                results.checks.push('Structure invalide');
-                results.isRestricted = true;
-                results.confidence += 20;
-            }
+            await query.edit_message_text("✅ *Vidéo envoyée !*", parse_mode='Markdown')
             
-            // Détermination finale basée sur les checks
-            if (results.confidence >= 50) {
-                results.isBanned = true;
-            } else if (results.confidence >= 30) {
-                results.isRestricted = true;
-            }
+            # Nettoyer
+            os.remove(result['path'])
             
-            return results;
-            
-        } catch (error) {
-            throw new Error(`Vérification échouée: ${error.message}`);
-        }
-    }
+        except Exception as e:
+            logger.error(f"Download error: {e}")
+            await query.edit_message_text(f"❌ Erreur : {str(e)[:100]}")
     
-    static isValidStructure(phoneNumber) {
-        return /^[0-9]{10,15}$/.test(phoneNumber) && 
-               !/^(123|111|222|333|444|555|666|777|888|999)/.test(phoneNumber);
-    }
-}
+    async def show_help(self, query):
+        """Afficher l'aide"""
+        help_text = """
+❓ *AIDE*
 
-// 🎯 COMMANDE /start
-bot.onText(/\/start/, async (msg) => {
-    const chatId = msg.chat.id;
+*Comment utiliser :*
+1. Copiez un lien vidéo Pinterest
+2. Envoyez-le au bot
+3. Choisissez la qualité
+4. Recevez la vidéo
+
+*Problèmes courants :*
+• *Lien non reconnu* : Vérifiez que c'est un lien Pinterest
+• *Téléchargement échoué* : Réessayez ou changez de qualité
+• *Vidéo trop grande* : Téléchargez en qualité inférieure
+
+*Commandes :*
+/start - Démarrer le bot
+/help - Afficher cette aide
+        """
+        
+        await query.edit_message_text(help_text, parse_mode='Markdown')
     
-    const welcomeMsg = `
-👑 *KING-CHECK-BAN - VÉRIFICATION RÉELLE* 👑
+    async def show_settings(self, query):
+        """Afficher les paramètres"""
+        settings = """
+⚙️ *PARAMÈTRES*
 
-🔍 *SYSTÈME DE VÉRIFICATION RÉEL:*
-✅ API WhatsApp Business
-✅ Validation NumVerify
-✅ Analyse patterns réels
-✅ Détection bannissements
+*Qualité par défaut :* HD
+*Format :* MP4
+*Taille max :* 50MB (limite Telegram)
 
-🚀 *COMMANDE:*
-🔍 /checkban [numéro]
+*Options :*
+• Compression automatique
+• Notification de fin
+• Historique des téléchargements
 
-💡 *Exemple réel:*
-/checkban 919876543210
-
-⚡ *Résultats 100% réels !*
-    `;
+*À venir :*
+• Téléchargement multiple
+• Plus de formats
+• Interface web
+        """
+        
+        await query.edit_message_text(settings, parse_mode='Markdown')
     
-    try {
-        await bot.sendPhoto(chatId, IMAGES.welcome, { caption: welcomeMsg, parse_mode: 'Markdown' });
-    } catch (error) {
-        await bot.sendMessage(chatId, welcomeMsg, { parse_mode: 'Markdown' });
-    }
-});
+    async def show_stats(self, query, user_id):
+        """Afficher les statistiques"""
+        stats = f"""
+📊 *STATISTIQUES*
 
-// 🎯 COMMANDE /checkban - VÉRIFICATION RÉELLE
-bot.onText(/\/checkban(?:\s+(.+))?/, async (msg, match) => {
-    const chatId = msg.chat.id;
-    const text = match[1];
-    
-    if (!text) {
-        return bot.sendMessage(chatId, 
-            `👑 *VÉRIFICATION RÉELLE* 👑\n\n` +
-            `📱 Utilisation: /checkban [numéro]\n\n` +
-            `🔍 Exemple réel: /checkban 919876543210\n\n` +
-            `✅ Résultats basés sur des APIs réelles`, 
-            { parse_mode: 'Markdown' }
-        );
-    }
-    
-    const phoneNumber = text.replace(/[^0-9]/g, '');
-    
-    if (phoneNumber.length < 10 || phoneNumber.length > 15) {
-        return bot.sendMessage(chatId, 
-            `❌ *Numéro invalide !*\n\n` +
-            `📏 Format requis: 10-15 chiffres\n` +
-            `🌍 Inclure le code pays\n\n` +
-            `💡 Exemple: 919876543210 (Inde)`, 
-            { parse_mode: 'Markdown' }
-        );
-    }
-    
-    try {
-        // Message d'attente
-        const waitingMsg = await bot.sendPhoto(chatId, IMAGES.checking, {
-            caption: `🔍 *VÉRIFICATION RÉELLE EN COURS...*\n\n` +
-                    `📞 Numéro: +${phoneNumber}\n` +
-                    `⚡ Connexion aux services WhatsApp...\n` +
-                    `⏳ Patientez 5-10 secondes`,
-            parse_mode: 'Markdown'
-        });
-        
-        // VÉRIFICATION RÉELLE
-        const result = await RealWhatsAppChecker.realBanCheck(phoneNumber);
-        
-        // RAPPORT RÉEL
-        let statusMsg = `👑 *RAPPORT DE VÉRIFICATION RÉEL* 👑\n\n`;
-        statusMsg += `📞 *Numéro analysé:* +${result.number}\n`;
-        statusMsg += `🎯 *Confiance:* ${result.confidence}%\n\n`;
-        statusMsg += `🔍 *CHECKS EFFECTUÉS:*\n`;
-        
-        result.checks.forEach((check, index) => {
-            statusMsg += `${index + 1}. ${check}\n`;
-        });
-        
-        statusMsg += `\n🛡️ *STATUT FINAL:*\n`;
-        
-        if (result.isBanned) {
-            statusMsg += `🚫 *BANNI DÉTECTÉ*\n\n`;
-            statusMsg += `⚠️ Ce numéro présente des caractéristiques de bannissement\n`;
-            statusMsg += `📉 Score de risque: Élevé\n\n`;
-            statusMsg += `💡 Conseil: Évitez ce numéro`;
-        } 
-        else if (result.isRestricted) {
-            statusMsg += `🔒 *RESTRICTIONS DÉTECTÉES*\n\n`;
-            statusMsg += `⚠️ Limitations potentielles sur WhatsApp\n`;
-            statusMsg += `📊 Score de risque: Moyen\n\n`;
-            statusMsg += `📱 Utilisez WhatsApp officiel`;
-        } 
-        else {
-            statusMsg += `✅ *PROPRE ET FONCTIONNEL*\n\n`;
-            statusMsg += `🎉 Aucun problème détecté\n`;
-            statusMsg += `📈 Score de risque: Faible\n\n`;
-            statusMsg += `💚 Numéro sécurisé pour WhatsApp`;
-        }
-        
-        statusMsg += `\n\n👑 *KING-CHECK-BAN - VÉRIFICATION RÉELLE TERMINÉE*`;
-        
-        // Résultat FINAL
-        await bot.sendPhoto(chatId, IMAGES.result, {
-            caption: statusMsg,
-            parse_mode: 'Markdown'
-        });
-        
-        // Suppression message attente
-        await bot.deleteMessage(chatId, waitingMsg.message_id);
-        
-    } catch (error) {
-        console.error('Erreur vérification réelle:', error);
-        await bot.sendMessage(chatId,
-            `❌ *ERREUR DE VÉRIFICATION RÉELLE*\n\n` +
-            `🔧 Détail: ${error.message}\n` +
-            `💡 Les services WhatsApp peuvent être temporairement indisponibles\n\n` +
-            `🔄 Réessayez dans quelques minutes`,
-            { parse_mode: 'Markdown' }
-        );
-    }
-});
+*Utilisateur :* {query.from_user.first_name}
+*Téléchargements :* 0
+*Dernier :* Jamais
 
-// 🎯 COMMANDE /info
-bot.onText(/\/info/, (msg) => {
-    const chatId = msg.chat.id;
+*Limites :*
+• Taille : 50MB max
+• Pas de limite quotidienne
+• Fichiers temporaires
+
+*Conseil :*
+Utilisez le WiFi pour les vidéos HD !
+        """
+        
+        await query.edit_message_text(stats, parse_mode='Markdown')
     
-    const infoMsg = `
-👑 *INFORMATIONS SYSTÈME RÉEL* 👑
-
-🔍 *MÉTHODES DE VÉRIFICATION:*
-✅ WhatsApp Business API
-✅ NumVerify Validation
-✅ Pattern Analysis
-✅ Real-time Checking
-
-🌍 *COUVERTURE:*
-250+ pays supportés
-Tous opérateurs
-Validation en temps réel
-
-⚡ *KING-CHECK-BAN - LE VÉRIFICATEUR RÉEL*
-    `;
+    async def cleanup_task(self):
+        """Nettoyage périodique"""
+        while True:
+            cleanup_old_files("temp", max_age_hours=1)
+            await asyncio.sleep(3600)  # Toutes les heures
     
-    bot.sendMessage(chatId, infoMsg, { parse_mode: 'Markdown' });
-});
+    def run(self):
+        """Lancer le bot"""
+        # Créer l'application
+        app = Application.builder().token(config.TOKEN).build()
+        
+        # Ajouter les handlers
+        app.add_handler(CommandHandler("start", self.start))
+        app.add_handler(CommandHandler("help", self.show_help))
+        
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+        app.add_handler(CallbackQueryHandler(self.handle_callback))
+        
+        # Démarrer la tâche de nettoyage
+        loop = asyncio.get_event_loop()
+        loop.create_task(self.cleanup_task())
+        
+        # Lancer le bot
+        print("🤖 Pinterest Downloader Bot démarré !")
+        print(f"👤 Nom : {config.BOT_NAME}")
+        print("📤 Envoyez /start pour commencer")
+        
+        app.run_polling()
 
-console.log('👑 KING-CHECK-BAN RÉEL DÉMARRÉ');
-console.log('🔍 Système de vérification réel actif');
-console.log('🌍 Prêt pour les analyses réelles...');
+if __name__ == "__main__":
+    # Vérifier le token
+    if config.TOKEN == "8556030809:AAFBaEyWxGOINMdO-7Bz-AvrrsUxCQWIwZI":
+        print("\n⚠️  CONFIGURATION REQUISE")
+        print("="*50)
+        print("1. Créez un bot sur Telegram avec @BotFather")
+        print("2. Copiez le token")
+        print("3. Éditez le fichier config.py")
+        print("4. Remplacez 'TON_TOKEN_ICI' par votre token")
+        print("="*50)
+        exit(1)
+    
+    bot = PinterestBot()
+    bot.run()
