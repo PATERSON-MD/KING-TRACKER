@@ -1,0 +1,156 @@
+# ============================================================================
+# PINTEREST VIDEO DOWNLOADER BOT
+# Dépendances Python requises
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# 1. BOT TELEGRAM (Obligatoire)
+# ----------------------------------------------------------------------------
+
+# Bibliothèque principale pour le bot Telegram
+python-telegram-bot==20.7
+# Alternative légère (si python-telegram-bot pose problème):
+# python-telegram-bot[job-queue]==20.7
+
+# ----------------------------------------------------------------------------
+# 2. TÉLÉCHARGEMENT VIDÉO (Obligatoire)
+# ----------------------------------------------------------------------------
+
+# Bibliothèque principale pour télécharger des vidéos
+yt-dlp==2023.12.30
+# yt-dlp est un fork maintenu de youtube-dl avec meilleur support
+
+# Pour la manipulation vidéo avancée (optionnel mais recommandé)
+moviepy==1.0.3
+
+# ----------------------------------------------------------------------------
+# 3. REQUÊTES HTTP & ASYNCHRONE (Obligatoire)
+# ----------------------------------------------------------------------------
+
+# Pour les requêtes HTTP asynchrones
+aiohttp==3.9.1
+aiofiles==23.2.1
+
+# Pour les requêtes HTTP synchrones (fallback)
+requests==2.31.0
+
+# Pour parser le HTML
+beautifulsoup4==4.12.2
+lxml==4.9.3  # Parseur plus rapide que html.parser
+
+# ----------------------------------------------------------------------------
+# 4. UTILITAIRES & CONFIGURATION (Recommandé)
+# ----------------------------------------------------------------------------
+
+# Gestion des variables d'environnement
+python-dotenv==1.0.0
+
+# Pour les logs structurés
+colorlog==6.7.0
+
+# Pour la manipulation de dates
+python-dateutil==2.8.2
+
+# Pour les opérations système
+psutil==5.9.6
+
+# Pour la validation des données
+pydantic==2.5.0
+
+# Pour les opérations sur les chemins
+pathlib2==2.3.7.post1  # Compatibilité Python 3.7+
+
+# ----------------------------------------------------------------------------
+# 5. TRAITEMENT VIDÉO & IMAGE (Optionnel)
+# ----------------------------------------------------------------------------
+
+# Pour la manipulation d'images (miniatures)
+Pillow==10.1.0
+
+# Pour les métadonnées vidéo
+hachoir==3.2.0
+
+# Pour le traitement audio/vidéo (si ffmpeg n'est pas disponible)
+imageio==2.31.5
+imageio-ffmpeg==0.4.9
+
+# ----------------------------------------------------------------------------
+# 6. BASE DE DONNÉES & CACHE (Optionnel)
+# ----------------------------------------------------------------------------
+
+# Base de données légère pour les statistiques
+tinydb==4.8.0
+
+# Cache en mémoire
+cachetools==5.3.2
+
+# ----------------------------------------------------------------------------
+# 7. SÉCURITÉ & VALIDATION (Recommandé)
+# ----------------------------------------------------------------------------
+
+# Pour valider les URLs
+validators==0.20.0
+
+# Pour le hachage de fichiers
+filelock==3.13.1
+
+# Pour les signatures de fichiers
+python-magic==0.4.27
+
+# ----------------------------------------------------------------------------
+# 8. MONITORING & LOGS (Optionnel)
+# ----------------------------------------------------------------------------
+
+# Pour les logs avancés
+structlog==23.2.0
+
+# Pour le monitoring des performances
+pyinstrument==4.6.1
+
+# ----------------------------------------------------------------------------
+# 9. INTERFACE UTILISATEUR AVANCÉE (Optionnel)
+# ----------------------------------------------------------------------------
+
+# Pour les barres de progression
+tqdm==4.66.1
+rich==13.7.0
+
+# Pour les tables dans les messages
+tabulate==0.9.0
+
+# ----------------------------------------------------------------------------
+# 10. COMPATIBILITÉ TERMUX (Spécial Mobile)
+# ----------------------------------------------------------------------------
+
+# Bibliothèques optimisées pour Termux/Android
+cryptography==41.0.7  # Pour le SSL
+pyopenssl==23.2.0     # Support SSL amélioré
+urllib3==2.0.7        # Pour les requêtes HTTP
+charset-normalizer==3.3.2  # Détection d'encodage
+
+# ----------------------------------------------------------------------------
+# VERSION LÉGÈRE (Minimum requis)
+# ----------------------------------------------------------------------------
+# python-telegram-bot==20.7
+# yt-dlp==2023.12.30
+# aiohttp==3.9.1
+# requests==2.31.0
+# python-dotenv==1.0.0
+
+# ============================================================================
+# NOTES D'INSTALLATION
+# ============================================================================
+
+# Pour installer toutes les dépendances :
+# pip install -r requirements.txt
+
+# Pour installer uniquement les dépendances essentielles :
+# pip install python-telegram-bot yt-dlp aiohttp requests python-dotenv
+
+# Pour Termux, installer d'abord :
+# pkg install python ffmpeg libjpeg-turbo libxml2 libxslt
+
+# Problèmes connus sur Termux :
+# - moviepy peut nécessiter des dépendances système
+# - Pillow peut nécessiter libjpeg
+# - lxml peut nécessiter libxml2 et libxslt
