@@ -10,7 +10,7 @@ import asyncio
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-from downloader import PinterestDownloader
+from pinterest_downloader import PinterestDownloader
 import config
 from utils import cleanup_old_files, format_size, get_user_display
 
