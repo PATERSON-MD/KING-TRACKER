@@ -1,48 +1,28 @@
 #!/usr/bin/env python3
 """
 PINTEREST VIDEO DOWNLOADER BOT
-Télécharge des vidéos depuis Pinterest
-Version modifiée pour utiliser .env
+Version modifiée avec token intégré
 """
+
+# ==================== VOTRE CONFIGURATION ====================
+# INSÉREZ VOTRE TOKEN ICI (obtenu de @BotFather)
+TELEGRAM_TOKEN = "8556030809:AAGBngujIXcwdlEuTCn0OEfo6TIQKDpu02s"
+BOT_NAME = "✨ Pinterest Downloader"
+# =============================================================
+
+print("="*60)
+print(f"🤖 {BOT_NAME}")
+print(f"🔑 Token: {TELEGRAM_TOKEN[:10]}...{TELEGRAM_TOKEN[-8:]}")
+print("="*60)
 
 import os
 import logging
 import asyncio
 from datetime import datetime
-from dotenv import load_dotenv  # NOUVEAU: Pour charger .env
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from pinterest_downloader import PinterestDownloader
-# import config  # COMMENTÉ: On n'utilise plus config.py
 from utils import cleanup_old_files, format_size, get_user_display
-
-# ==================== CHARGEMENT DU .env ====================
-# Définir le chemin ABSOLU vers le fichier .env
-ENV_PATH = "/data/data/com.termux/files/home/KING-TRACKER/.env"
-
-# Vérifier si le fichier existe
-if os.path.exists(ENV_PATH):
-    load_dotenv(dotenv_path=ENV_PATH, override=True)
-    print(f"✅ Fichier .env chargé depuis : {ENV_PATH}")
-    
-    # Vérifier que le token est bien chargé
-    TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-    BOT_NAME = os.getenv("BOT_NAME", "✨ Pinterest Downloader")  # Valeur par défaut
-    
-    if TELEGRAM_TOKEN and TELEGRAM_TOKEN != "TON_TOKEN_ICI":
-        print(f"✅ Token chargé (masqué) : {'*' * len(TELEGRAM_TOKEN)}")
-        print(f"✅ Nom du bot : {BOT_NAME}")
-    else:
-        print("❌ ERREUR: Token TELEGRAM_TOKEN non défini ou invalide !")
-        print("   Vérifiez votre fichier .env")
-        print("   Le token doit être sous la forme : TELEGRAM_TOKEN=votre_token")
-        exit(1)
-else:
-    print(f"❌ Fichier .env introuvable à : {ENV_PATH}")
-    print("   Créez le fichier avec: nano .env")
-    print("   Ajoutez: TELEGRAM_TOKEN=votre_token")
-    exit(1)
-# ==================== FIN DU CHARGEMENT ====================
 
 # Setup logging
 logging.basicConfig(
@@ -98,11 +78,14 @@ Envoyez-moi un lien pour commencer !
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
+        print(f"👤 Nouvel utilisateur: {user.first_name} (ID: {user.id})")
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Gérer les messages avec liens"""
         text = update.message.text.strip()
         user_id = update.effective_user.id
+        
+        print(f"📩 Message de {update.effective_user.first_name}: {text[:50]}...")
         
         if not self.downloader.is_valid_url(text):
             await update.message.reply_text(
@@ -326,8 +309,8 @@ Utilisez le WiFi pour les vidéos HD !
     
     def run(self):
         """Lancer le bot"""
-        # Créer l'application
-        app = Application.builder().token(TELEGRAM_TOKEN).build()  # Utilise TELEGRAM_TOKEN du .env
+        # Créer l'application avec le token DIRECT
+        app = Application.builder().token(TELEGRAM_TOKEN).build()
         
         # Ajouter les handlers
         app.add_handler(CommandHandler("start", self.start))
@@ -341,15 +324,32 @@ Utilisez le WiFi pour les vidéos HD !
         loop.create_task(self.cleanup_task())
         
         # Lancer le bot
-        print("\n" + "="*50)
-        print("🤖 Pinterest Downloader Bot démarré !")
-        print(f"👤 Nom : {BOT_NAME}")
-        print("📤 Envoyez /start pour commencer")
-        print("="*50 + "\n")
+        print("✅ Bot Telegram connecté!")
+        print("📱 Ouvrez Telegram et cherchez votre bot")
+        print("👋 Envoyez /start pour commencer")
+        print("-"*60)
         
         app.run_polling()
 
 if __name__ == "__main__":
-    # Plus besoin de vérification, c'est déjà fait au début
-    bot = PinterestBot()
-    bot.run()
+    # Vérification rapide du token
+    if not TELEGRAM_TOKEN or TELEGRAM_TOKEN == "TON_TOKEN_ICI":
+        print("❌ ERREUR: Token Telegram non configuré!")
+        print("Obtenez un token sur @BotFather")
+        print("Remplacez 'TON_TOKEN_ICI' par votre vrai token")
+        exit(1)
+    
+    if ":" not in TELEGRAM_TOKEN:
+        print("❌ ERREUR: Format de token invalide!")
+        print("Le token doit contenir ':' (ex: 1234567890:ABCdef...")
+        exit(1)
+    
+    try:
+        bot = PinterestBot()
+        bot.run()
+    except Exception as e:
+        print(f"❌ ERREUR: {e}")
+        print("\nSolutions possibles:")
+        print("1. pip install python-telegram-bot --upgrade")
+        print("2. Vérifiez votre connexion internet")
+        print("3. Token invalide? Recréez-le avec @BotFather")
